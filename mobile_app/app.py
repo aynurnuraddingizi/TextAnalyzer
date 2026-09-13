@@ -91,9 +91,9 @@ class RootWidget(BoxLayout):
             self.log("No file picked.")
             return
         try:
-            import android_support
-
             import text_analyzer
+
+            from mobile_app import android_support
             picked = selection[0]
             real_path = android_support.resolve_to_tempfile(picked)
             text = text_analyzer.load_book_text(real_path)
