@@ -1,0 +1,23 @@
+# Secrets
+.env
+
+# PyInstaller build artifacts
+build/
+dist/
+*.spec.bak
+
+# The packaged executable is distributed via GitHub Releases, not the repo
+# (it's ~176MB, over GitHub's 100MB per-file limit for normal commits)
+/TextAnalyzer.exe
+
+# Python
+__pycache__/
+*.pyc
+
+# Per-user runtime data (generated on first run, not part of the program itself)
+vocabulary_progress.json
+vocabulary_progress.json.*
+vocabmaster_settings.json
+
+# Personal working files not part of the app
+*_anki.txt

@@ -1,0 +1,8 @@
+pypdf
+nltk
+ebooklib
+beautifulsoup4
+langdetect
+gtts
+python-docx
+reportlab
