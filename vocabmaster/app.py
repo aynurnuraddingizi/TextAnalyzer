@@ -23,47 +23,36 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
 from text_analyzer import (
-    OFFLINE_DICT_LANGS,
     RESET_BACKUP_DAYS,
     WORDNET_LANG_CODES,
     add_recent_book,
     app_dir,
     backup_before_reset,
-    build_example_sentences,
-    build_cefr_map,
-    build_glossary,
-    build_pos_map,
     cefr_level,
     define,
-    detect_language,
     due_words,
     empty_language_progress,
-    ensure_phrase_data,
-    ensure_wordnet,
     estimate_vocabulary_level,
-    extract_phrases,
     find_occurrences,
     language_name,
     load_book_text,
     load_progress,
     load_settings,
     mark_known,
-    readability_stats,
     remove_recent_book,
     restorable_backup,
     review_word,
     save_progress,
     save_settings,
     speak_word,
-    split_sentences,
     word_family_root,
-    word_frequencies,
     word_pos,
     words_learned_since,
 )
 
 import theme as th
 import export as exp
+from pipeline import run_pipeline_steps
 from study import StudyWindow, build_study_summary_card
 from onboarding import OnboardingWizard
 from concordance import ConcordanceWindow
@@ -74,11 +63,9 @@ from grammar_analyzer import (
     CATEGORY_ORDER,
     CATEGORY_ORDER_ES,
     GrammarQuizWindow,
-    analyze_grammar,
     build_grammar_readiness_card,
     build_grammar_section,
     build_sentence_index,
-    ensure_pos_tagger,
 )
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -1417,76 +1404,23 @@ class MainWindow(tk.Tk):
             self.render_results()
 
     def run_pipeline(self):
+        # The actual analysis logic lives in pipeline.run_pipeline_steps()
+        # — a plain, Tkinter-free function shared with the Android app —
+        # this method is just the Tkinter-side plumbing: reading this
+        # run's inputs off widgets, forwarding its callbacks onto
+        # self.work_queue exactly as before extraction, and catching/
+        # logging any exception it raises.
         try:
             text = self._get_book_text()
-            self.work_queue.put(("status", "Extracting unique words..."))
-            freqs = word_frequencies(text)
-            words = sorted(freqs.keys())
             choice = self.lang_choice_var.get()
-            lang = detect_language(text) if choice == "auto" else choice
-            wordnet_lang = WORDNET_LANG_CODES.get(lang)
-            offline_dict_lang = lang if lang in OFFLINE_DICT_LANGS else None
-            # Split once, reused for both this run's example sentences and
-            # any later Find in Book search — splitting is the expensive
-            # part, not the search itself.
-            sentences = split_sentences(text)
-            examples = build_example_sentences(text, words, sentences=sentences)
-            self.work_queue.put(("status", f"Found {len(words)} unique words. Checking dictionary data..."))
-            ensure_wordnet()
-            self.work_queue.put(("progress_setup", len(words)))
-
-            last_status_at = [0.0]
-
-            def on_progress(i, total):
-                self.work_queue.put(("progress", i, total))
-                now = time.monotonic()
-                if now - last_status_at[0] > 0.5:
-                    last_status_at[0] = now
-                    self.work_queue.put(("status", f"Looking up definitions... {i}/{total} words"))
-
-            defined, undefined, _ = build_glossary(
-                words, on_progress=on_progress, should_continue=self._keep_going,
-                wordnet_lang=wordnet_lang, offline_dict_lang=offline_dict_lang,
+            result = run_pipeline_steps(
+                text, choice,
+                on_status=lambda msg: self.work_queue.put(("status", msg)),
+                on_progress_setup=lambda total: self.work_queue.put(("progress_setup", total)),
+                on_progress=lambda i, total: self.work_queue.put(("progress", i, total)),
+                should_continue=self._keep_going,
             )
-            # WordNet-only (English/Spanish/French/Arabic-via-WordNet) —
-            # German/Turkish/Russian/most-Arabic simply get {} here since
-            # their offline dictionaries carry no part-of-speech data at
-            # all (see build_pos_map()'s docstring).
-            pos_map = build_pos_map([w for w, _d in defined], wordnet_lang=wordnet_lang)
-            # English/Spanish only (see build_cefr_map()'s docstring) —
-            # every other language's `defined` list simply yields {} here.
-            cefr_map = build_cefr_map([w for w, _d in defined], lang=lang, pos_map=pos_map)
-            # Grammar analysis is the last step of this same run rather
-            # than a separate button/thread: tagging every sentence with
-            # nltk's lightweight perceptron tagger is expected to be in
-            # the same low-single-digit-to-tens-of-seconds range this
-            # step's dictionary-lookup loop above already runs in, and a
-            # second on-demand action would split "analyze this book"
-            # into two separate waits/cancel-paths for little benefit.
-            # English/Spanish only (see analyze_grammar()'s docstring) —
-            # every other language gets {} for free. Only English needs
-            # nltk's tagger downloaded first; Spanish detection works
-            # from spelling/suffixes alone, no tagger involved.
-            if lang in ("en", "es"):
-                self.work_queue.put(("status", "Analyzing grammar structures..."))
-            if lang == "en":
-                ensure_pos_tagger()
-            grammar_results = analyze_grammar(sentences, lang=lang, should_continue=self._keep_going)
-            # English/Spanish only (see readability_stats()'s docstring)
-            # — every other language gets None, same "quietly absent"
-            # convention as pos_map/cefr_map/grammar_results.
-            readability = readability_stats(text, lang=lang)
-            # Language-general (see extract_phrases()'s docstring) —
-            # unlike grammar/CEFR/pronunciation, this isn't English-only,
-            # so every book gets phrase extraction, not just English/
-            # Spanish ones (though only those two get the "recognized"
-            # real-dictionary tier — every language still gets "recurring").
-            ensure_phrase_data(lang)
-            phrases = extract_phrases(sentences, lang=lang)
-            self.work_queue.put((
-                "glossary_done", defined, undefined, lang, freqs, examples, sentences, pos_map, cefr_map,
-                grammar_results, readability, phrases,
-            ))
+            self.work_queue.put(("glossary_done", *result))
         except Exception as exc:
             # A bare str(exc) alone ("sequence item 1: expected str
             # instance, NoneType found" and the like) names WHAT went

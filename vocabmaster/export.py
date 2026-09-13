@@ -13,7 +13,7 @@ from reportlab.lib.pagesizes import LETTER
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
 
-from grammar_analyzer import CATEGORY_ORDER, CATEGORY_ORDER_ES
+from grammar_engine import CATEGORY_ORDER, CATEGORY_ORDER_ES
 
 
 def coverage_line(freqs, top_n=200):
