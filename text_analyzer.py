@@ -139,7 +139,24 @@ def app_dir():
     not inside the bundled onefile archive (sys._MEIPASS), so they
     survive updates and are easy for a user to find/back up. Contrast
     with `_resource_dir()`, used for bundled read-only resources.
+
+    On Android there is no ".exe" and no writable directory next to
+    this script (python-for-android's own bundle location isn't
+    reliably writable) — `android.storage.app_storage_path()` is
+    python-for-android's own blessed API for "a real, private,
+    writable directory this app owns", used instead. Only ever
+    imports `kivy`/`android` when actually running under Kivy on
+    Android — the Windows desktop build never has either installed,
+    and this branch must never execute or even attempt the import
+    there.
     """
+    try:
+        from kivy.utils import platform as _kivy_platform
+    except ImportError:
+        _kivy_platform = None
+    if _kivy_platform == "android":
+        from android.storage import app_storage_path
+        return app_storage_path()
     if getattr(sys, "frozen", False):
         return os.path.dirname(sys.executable)
     return os.path.dirname(os.path.abspath(__file__))
@@ -2461,6 +2478,31 @@ def _play_audio_linux(path):
     ) from last_error
 
 
+def _play_audio_android(path):
+    # pyjnius binding straight to Android's own MediaPlayer — same
+    # gTTS-fetched mp3 as every other platform (no engine swap, full
+    # pronunciation/language-coverage parity with Windows/macOS/Linux),
+    # just a different playback mechanism, since Android has neither
+    # ctypes.windll nor a shell-launchable command-line player. Polls
+    # isPlaying() rather than returning immediately after start(), to
+    # match every other _play_audio_*'s synchronous-until-done contract
+    # (Windows' "play ... wait", macOS/Linux's blocking subprocess.run).
+    import time
+
+    from jnius import autoclass
+
+    MediaPlayer = autoclass("android.media.MediaPlayer")
+    player = MediaPlayer()
+    try:
+        player.setDataSource(path)
+        player.prepare()
+        player.start()
+        while player.isPlaying():
+            time.sleep(0.1)
+    finally:
+        player.release()
+
+
 def speak_word(word, lang):
     """Synthesize and play the pronunciation of a word out loud.
 
@@ -2469,13 +2511,14 @@ def speak_word(word, lang):
     crashed natively for reasons never pinned down, see project history)
     via the `gtts` package to synthesize the MP3, then hands playback off
     to a platform-specific helper: Windows' built-in MCI API (no extra
-    library), macOS's bundled `afplay` command, or — Linux having no
-    single standard player — the first of a few common command-line
-    players (mpg123/ffplay/mpv/vlc) that's actually installed. Verified
-    directly on Windows for English, Spanish, Arabic, German, and
-    Turkish; the macOS/Linux paths are new and rely on tools standard
-    enough (or, for Linux, common enough) that they should carry the
-    same behavior over, but haven't been run on those platforms directly.
+    library), macOS's bundled `afplay` command, Android's own
+    MediaPlayer (via pyjnius), or — Linux having no single standard
+    player — the first of a few common command-line players (mpg123/
+    ffplay/mpv/vlc) that's actually installed. Verified directly on
+    Windows for English, Spanish, Arabic, German, and Turkish; the
+    macOS/Linux paths are new and rely on tools standard enough (or,
+    for Linux, common enough) that they should carry the same behavior
+    over, but haven't been run on those platforms directly.
 
     Results are cached to a temp directory keyed by (lang, word) so
     replaying the same word — a natural thing to do while studying —
@@ -2491,7 +2534,14 @@ def speak_word(word, lang):
     if not os.path.exists(path):
         gTTS(text=word, lang=lang).save(path)
 
-    if sys.platform == "win32":
+    try:
+        from kivy.utils import platform as _kivy_platform
+    except ImportError:
+        _kivy_platform = None
+
+    if _kivy_platform == "android":
+        _play_audio_android(path)
+    elif sys.platform == "win32":
         _play_audio_windows(path)
     elif sys.platform == "darwin":
         _play_audio_macos(path)
