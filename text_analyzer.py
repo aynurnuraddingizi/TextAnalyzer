@@ -51,7 +51,7 @@ from ebooklib import epub
 import ebooklib
 import nltk
 from nltk.corpus import wordnet as wn
-from nltk.corpus.reader.wordnet import WordNetError
+from nltk.corpus.reader.wordnet import WordNetCorpusReader, WordNetError
 from nltk.corpus import cmudict, stopwords
 from langdetect import detect, LangDetectException
 from gtts import gTTS
@@ -1044,7 +1044,8 @@ def _best_synset(word, lang="eng"):
 # fold into the same label rather than exposing a WordNet-internal
 # distinction nobody outside computational linguistics cares about.
 _WORDNET_POS_NAMES = {
-    wn.NOUN: "noun", wn.VERB: "verb", wn.ADJ: "adjective", wn.ADJ_SAT: "adjective", wn.ADV: "adverb",
+    WordNetCorpusReader.NOUN: "noun", WordNetCorpusReader.VERB: "verb", WordNetCorpusReader.ADJ: "adjective",
+    WordNetCorpusReader.ADJ_SAT: "adjective", WordNetCorpusReader.ADV: "adverb",
 }
 
 
@@ -2369,7 +2370,7 @@ def estimate_vocabulary_level(known_words, lang="en", threshold=0.5):
     return current
 
 
-_MORPHY_POS = (wn.NOUN, wn.VERB, wn.ADJ, wn.ADV)
+_MORPHY_POS = (WordNetCorpusReader.NOUN, WordNetCorpusReader.VERB, WordNetCorpusReader.ADJ, WordNetCorpusReader.ADV)
 
 
 def _morphy_lemma_and_pos(word):
