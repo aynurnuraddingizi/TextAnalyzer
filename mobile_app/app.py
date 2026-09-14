@@ -10,6 +10,7 @@ logic" discipline the rest of this app already follows.
 """
 import os
 import sys
+import traceback
 
 # text_analyzer.py lives one directory up (the project root) -- add it
 # to sys.path before anything here imports it, same trick
@@ -43,10 +44,14 @@ class RootWidget(BoxLayout):
             ("3. Pick a book (PDF/EPUB)", self.pick_book),
             ("4. Build glossary from picked book", self.build_glossary),
             ("5. Speak a word out loud", self.speak_word),
+            ("CLEAR LOG", self.clear_log),
         ):
             btn = Button(text=label, size_hint_y=None, height=70)
             btn.bind(on_release=callback)
             self.add_widget(btn)
+
+    def clear_log(self, _instance):
+        self.status.text = "Ready."
 
     def _update_status_height(self, instance, value):
         instance.height = value[1]
@@ -61,7 +66,7 @@ class RootWidget(BoxLayout):
             import text_analyzer
             self.log(f"OK: text_analyzer imported ({text_analyzer.__file__})")
         except Exception as exc:
-            self.log(f"FAIL (1): {exc!r}")
+            self.log(f"FAIL (1): {traceback.format_exc()}")
 
     def check_dictionary(self, _instance):
         try:
@@ -77,14 +82,14 @@ class RootWidget(BoxLayout):
             conn.close()
             self.log(f"OK: dict_de.sqlite3 found at {path}, {count} rows")
         except Exception as exc:
-            self.log(f"FAIL (2): {exc!r}")
+            self.log(f"FAIL (2): {traceback.format_exc()}")
 
     def pick_book(self, _instance):
         try:
             from plyer import filechooser
             filechooser.open_file(on_selection=self._on_file_picked, filters=["*.pdf", "*.epub"])
         except Exception as exc:
-            self.log(f"FAIL (3): {exc!r}")
+            self.log(f"FAIL (3): {traceback.format_exc()}")
 
     def _on_file_picked(self, selection):
         if not selection:
@@ -100,7 +105,7 @@ class RootWidget(BoxLayout):
             self.picked_text = text
             self.log(f"OK (3): extracted {len(text)} characters from {picked}")
         except Exception as exc:
-            self.log(f"FAIL (3): {exc!r}")
+            self.log(f"FAIL (3): {traceback.format_exc()}")
 
     def build_glossary(self, _instance):
         if not self.picked_text:
@@ -115,7 +120,7 @@ class RootWidget(BoxLayout):
             sample = ", ".join(w for w, _d in defined[:10])
             self.log(f"OK (4): {len(defined)} defined, {len(undefined)} undefined. Sample: {sample}")
         except Exception as exc:
-            self.log(f"FAIL (4): {exc!r}")
+            self.log(f"FAIL (4): {traceback.format_exc()}")
 
     def speak_word(self, _instance):
         try:
@@ -123,7 +128,7 @@ class RootWidget(BoxLayout):
             text_analyzer.speak_word("hello", "en")
             self.log("OK (5): speak_word('hello', 'en') completed without raising")
         except Exception as exc:
-            self.log(f"FAIL (5): {exc!r}")
+            self.log(f"FAIL (5): {traceback.format_exc()}")
 
 
 class TextAnalyzerToolchainTestApp(App):
