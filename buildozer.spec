@@ -42,7 +42,7 @@ version = 0.1
 
 # (list) Application requirements
 # comma separated e.g. requirements = sqlite3,kivy
-requirements = python3==3.11.9,hostpython3==3.11.9,kivy,plyer,pyjnius,pypdf,nltk,ebooklib,beautifulsoup4,langdetect,gtts,certifi,typing_extensions,soupsieve,click,joblib,regex,tqdm,colorama,lxml
+requirements = python3==3.11.9,hostpython3==3.11.9,kivy,plyer,pyjnius,pypdf,nltk,ebooklib,beautifulsoup4,langdetect,gtts,certifi,typing_extensions,soupsieve,click,joblib,regex,tqdm,colorama,lxml,defusedxml
 
 # (str) Custom source folders for requirements
 # Sets custom source for any requirements with recipes
