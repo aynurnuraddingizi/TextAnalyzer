@@ -44,6 +44,7 @@ from text_analyzer import (
     review_word,
     save_progress,
     save_settings,
+    set_note,
     speak_word,
     word_family_root,
     word_pos,
@@ -160,15 +161,16 @@ class MainWindow(tk.Tk):
 
         progress = load_progress()
         # Every language's progress, all at once — {"en": {"known": set,
-        # "learning": set, "schedule": dict, "learned_at": dict}, "de":
-        # {...}, ...}. self.known_words/learning_words/progress_schedule/
-        # progress_learned_at below are never their own independent data
-        # — they're live references into whichever language bucket is
-        # currently active (see _switch_active_language()), so every
-        # existing bit of code that mutates them in place (.add(),
-        # .discard(), |=, review_word(), mark_known()) keeps working
-        # completely unchanged; only a REASSIGNMENT of one of those four
-        # names (rather than mutating it) would silently break the link.
+        # "learning": set, "schedule": dict, "learned_at": dict, "notes":
+        # dict}, "de": {...}, ...}. self.known_words/learning_words/
+        # progress_schedule/progress_learned_at/progress_notes below are
+        # never their own independent data — they're live references into
+        # whichever language bucket is currently active (see
+        # _switch_active_language()), so every existing bit of code that
+        # mutates them in place (.add(), .discard(), |=, review_word(),
+        # mark_known(), set_note()) keeps working completely unchanged;
+        # only a REASSIGNMENT of one of those five names (rather than
+        # mutating it) would silently break the link.
         self.all_progress = progress["languages"]
         self.reset_backups = progress["reset_backups"]  # lang -> pre-reset snapshot, see reset_progress()
         self.active_lang = None
@@ -176,6 +178,7 @@ class MainWindow(tk.Tk):
         self.learning_words = set()
         self.progress_schedule = {}
         self.progress_learned_at = {}
+        self.progress_notes = {}
         self._switch_active_language("en")  # default before any book's language is known
 
         # Grammar's own known/learning/schedule/learned_at — a SINGLE
@@ -415,6 +418,14 @@ class MainWindow(tk.Tk):
         )
         self.progress_stat_label.pack(anchor="w", padx=10, pady=(0, 10))
         self.themed.add(self.progress_stat_label, bg="PANEL", fg="DIM")
+
+        # Every word with a personal note, across every book in this
+        # language — see _open_notes_view(). Grouped with RESET/RESTORE
+        # below rather than up near "+ ADD BOOK", since notes are a
+        # vocabulary-progress concept scoped per-language, same as the
+        # two stat cards just above.
+        self.notes_btn = ttk.Button(sidebar, text="\U0001F4DD MY NOTES", command=self._open_notes_view)
+        self.notes_btn.pack(fill="x", pady=(10, 0))
 
         # Text set per-language in _refresh_vocab_stat() (e.g. "RESET
         # ENGLISH PROGRESS") — resets only the currently active
@@ -948,6 +959,35 @@ class MainWindow(tk.Tk):
         self.detail_text.config(state="disabled")
         self.themed.add(self.detail_text, bg="PANEL", fg="FG", insertbackground="FG")
 
+        # A personal note on the CURRENT single word — the one editable
+        # text widget in this whole panel (everything else here is
+        # deliberately read-only). Single-word only, like SPEAK/FIND ALL/
+        # WORD INFO below, not bulk like Know/Learning — see
+        # _show_selection(). Saved explicitly via SAVE NOTE, matching
+        # this app's own convention of explicit action buttons rather
+        # than silent auto-save-as-you-type anywhere else.
+        note_label = tk.Label(panel, text="NOTES", bg=p["PANEL"], fg=p["DIM"], font=th.FONT_SMALL_BOLD)
+        note_label.pack(anchor="w", padx=14, pady=(6, 0))
+        self.themed.add(note_label, bg="PANEL", fg="DIM")
+        note_row = tk.Frame(panel, bg=p["PANEL"])
+        note_row.pack(fill="x", padx=14)
+        self.themed.add(note_row, bg="PANEL")
+        self.detail_note_text = tk.Text(
+            note_row, bg=p["PANEL"], fg=p["FG"], font=th.FONT, wrap="word", relief="flat",
+            height=2, highlightthickness=1, highlightbackground=p["PANEL_BORDER"], highlightcolor=p["ACCENT"],
+            padx=6, pady=4, insertbackground=p["FG"],
+        )
+        self.detail_note_text.pack(side="left", fill="x", expand=True)
+        self.themed.add(
+            self.detail_note_text, bg="PANEL", fg="FG", insertbackground="FG", highlightbackground="PANEL_BORDER",
+            highlightcolor="ACCENT",
+        )
+        self.detail_save_note_btn = ttk.Button(
+            note_row, text="\U0001F4BE SAVE NOTE", command=self._save_note, state="disabled",
+        )
+        self.detail_save_note_btn.pack(side="left", padx=(8, 0), anchor="s")
+        self.detail_note_text.config(state="disabled")
+
         btn_row = tk.Frame(panel, bg=p["PANEL"])
         btn_row.pack(fill="x", padx=14, pady=10)
         self.themed.add(btn_row, bg="PANEL")
@@ -1192,14 +1232,14 @@ class MainWindow(tk.Tk):
 
     def _switch_active_language(self, lang):
         """Point self.known_words/learning_words/progress_schedule/
-        progress_learned_at at `lang`'s own progress bucket in
-        self.all_progress — creating an empty one if this language has
-        no progress yet. Called once at startup (defaulting to "en"
-        before any book's language is known) and again every time a
-        glossary finishes generating, so opening a German book after an
-        English one switches to (and only ever affects) German progress,
-        never mixing the two. Safe to call with the language already
-        active — it's a no-op re-point to the same bucket.
+        progress_learned_at/progress_notes at `lang`'s own progress
+        bucket in self.all_progress — creating an empty one if this
+        language has no progress yet. Called once at startup (defaulting
+        to "en" before any book's language is known) and again every
+        time a glossary finishes generating, so opening a German book
+        after an English one switches to (and only ever affects) German
+        progress, never mixing the two. Safe to call with the language
+        already active — it's a no-op re-point to the same bucket.
         """
         lang = lang or "en"
         if lang not in self.all_progress:
@@ -1210,6 +1250,7 @@ class MainWindow(tk.Tk):
         self.learning_words = bucket["learning"]
         self.progress_schedule = bucket["schedule"]
         self.progress_learned_at = bucket["learned_at"]
+        self.progress_notes = bucket["notes"]
 
     def _save_progress(self):
         # Every save writes the WHOLE progress file (every language plus
@@ -1719,8 +1760,9 @@ class MainWindow(tk.Tk):
             self.word_lookup[word] = (definition, count, example, pos, level)
             status = "known" if word in self.known_words else ("learning" if word in self.learning_words else "new")
             short_def = definition if len(definition) <= 90 else definition[:87] + "..."
+            note_icon = "\U0001F4DD" if word in self.progress_notes else ""
             self.tree.insert(
-                parent, "end", iid=word, text=f"{STATUS_ICON[status]} {word}".strip(),
+                parent, "end", iid=word, text=f"{STATUS_ICON[status]}{note_icon} {word}".strip(),
                 values=(count or "", pos or "", level or "", short_def), tags=(status,),
             )
 
@@ -1813,6 +1855,10 @@ class MainWindow(tk.Tk):
             self.detail_find_btn.config(state="normal" if self.book_sentences else "disabled")
             self.detail_word_info_btn.config(state="normal")
             self.detail_focus_btn.config(state="disabled")
+            self.detail_note_text.config(state="normal")
+            self.detail_note_text.delete("1.0", "end")
+            self.detail_note_text.insert("1.0", self.progress_notes.get(word, ""))
+            self.detail_save_note_btn.config(state="normal")
         else:
             self.detail_word_var.set(f"{len(words)} words selected")
             self.detail_text.insert(
@@ -1823,6 +1869,9 @@ class MainWindow(tk.Tk):
             self.detail_find_btn.config(state="disabled")
             self.detail_word_info_btn.config(state="disabled")
             self.detail_focus_btn.config(state="normal")
+            self.detail_note_text.delete("1.0", "end")
+            self.detail_note_text.config(state="disabled")
+            self.detail_save_note_btn.config(state="disabled")
         self.detail_text.config(state="disabled")
         self.detail_know_btn.config(state="normal")
         self.detail_learning_btn.config(state="normal")
@@ -1834,6 +1883,10 @@ class MainWindow(tk.Tk):
         self.detail_text.config(state="normal")
         self.detail_text.delete("1.0", "end")
         self.detail_text.config(state="disabled")
+        self.detail_note_text.config(state="normal")
+        self.detail_note_text.delete("1.0", "end")
+        self.detail_note_text.config(state="disabled")
+        self.detail_save_note_btn.config(state="disabled")
         for btn in (
             self.detail_speak_btn, self.detail_find_btn, self.detail_word_info_btn, self.detail_focus_btn,
             self.detail_know_btn, self.detail_learning_btn,
@@ -2501,6 +2554,21 @@ class MainWindow(tk.Tk):
             wordnet_lang=WORDNET_LANG_CODES.get(self.detected_lang), sentences=self.book_sentences,
         )
 
+    def _save_note(self):
+        if not self.selected_word:
+            return
+        word = self.selected_word
+        text = self.detail_note_text.get("1.0", "end-1c").strip()
+        set_note(self.progress_notes, word, text)
+        self._save_progress()
+        # Cheap targeted update — just this row's displayed icon — rather
+        # than a full render_results(), so the tree's scroll position and
+        # the rest of the current filter/selection stay put.
+        if self.tree.exists(word):
+            status = "known" if word in self.known_words else ("learning" if word in self.learning_words else "new")
+            note_icon = "\U0001F4DD" if word in self.progress_notes else ""
+            self.tree.item(word, text=f"{STATUS_ICON[status]}{note_icon} {word}".strip())
+
     def _detail_focus_view(self):
         # word_lookup values are (definition, count, example, pos,
         # level) — see render_results()'s insert_word_row() closure,
@@ -2513,25 +2581,64 @@ class MainWindow(tk.Tk):
         entries = []
         for word in words:
             definition, _count, example, pos, level = self.word_lookup[word]
-            entries.append((word, pos, level, definition, example))
+            entries.append((word, pos, level, definition, example, self.progress_notes.get(word)))
         FocusViewWindow(
             self, entries, self.palette, on_mark=self._detail_mark,
             on_speak=self.speak, on_study=self._focus_view_study,
         )
 
-    def _focus_view_study(self, mode):
+    def _open_notes_view(self):
+        # Same FocusViewWindow as _detail_focus_view() above, just fed a
+        # word LIST that didn't come from the tree selection — every
+        # noted word across the whole active language, not just whatever
+        # happens to be selected right now. A noted word from a book
+        # that isn't the one currently loaded has no word_lookup entry
+        # (that's rebuilt fresh per book) — still shown, since the whole
+        # point is "every noted word, in one place", just without a
+        # dictionary definition; the note itself is the content.
+        if not self.progress_notes:
+            messagebox.showinfo(
+                "My Notes", "No notes yet — select a word and use the NOTES box in the Detail panel.",
+            )
+            return
+        words = sorted(self.progress_notes)
+        entries = []
+        for word in words:
+            if word in self.word_lookup:
+                definition, _count, example, pos, level = self.word_lookup[word]
+            else:
+                definition, example, pos, level = "(not in the currently loaded book)", None, None, None
+            entries.append((word, pos, level, definition, example, self.progress_notes[word]))
+        FocusViewWindow(
+            self, entries, self.palette,
+            on_mark=lambda status: self._detail_mark(status, words=words),
+            on_speak=self.speak, on_study=lambda mode: self._focus_view_study(mode, words=words),
+        )
+
+    def _focus_view_study(self, mode, words=None):
         # Reads self.selected_words fresh, same as _detail_mark() does
         # for marking — Focus View itself never keeps its own copy of
         # "which words", it just hands the mode back once closed (see
         # FocusViewWindow._study()) and this re-reads the same selection
         # the main tree still has, exactly the way on_mark already works.
-        words = [w for w in self.selected_words if w in self.word_lookup and w not in self.known_words]
+        # `words`, if given (from _open_notes_view()), overrides that —
+        # same "caller decides which words, this just acts on them"
+        # split either way.
+        words = words if words is not None else self.selected_words
+        words = [w for w in words if (w in self.word_lookup or w in self.progress_notes) and w not in self.known_words]
         if not words:
             messagebox.showinfo(
                 "Study", "Nothing left to study here — every one of these words is already marked known.",
             )
             return
-        entries = [(word, self.word_lookup[word][0]) for word in words]
+        # A word with no word_lookup entry (noted from a different book)
+        # has no dictionary definition to show on a flashcard's reveal
+        # side — its own note stands in for one, which is exactly what
+        # makes "my noted words" reviewable here at all.
+        entries = [
+            (word, self.word_lookup[word][0] if word in self.word_lookup else self.progress_notes[word])
+            for word in words
+        ]
         StudyWindow(
             self, entries, self.word_examples, on_finish=self._record_study_results,
             lang=self.detected_lang, palette=self.palette, schedule=self.progress_schedule,
@@ -2539,8 +2646,8 @@ class MainWindow(tk.Tk):
             pos_map=self.word_pos_map, cefr_map=self.word_cefr_map,
         )
 
-    def _detail_mark(self, status):
-        words = self.selected_words
+    def _detail_mark(self, status, words=None):
+        words = words if words is not None else self.selected_words
         if not words:
             return
         for word in words:

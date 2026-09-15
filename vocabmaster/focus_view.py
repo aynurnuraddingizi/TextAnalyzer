@@ -41,10 +41,15 @@ import theme as th
 
 class FocusViewWindow(tk.Toplevel):
     def __init__(self, master, entries, palette, on_mark, on_speak=None, on_study=None):
-        """`entries` is [(word, pos, level, definition, example), ...]
+        """`entries` is [(word, pos, level, definition, example, note), ...]
         for the words to review, already in whatever order the caller
         sorted them (app.py passes them in the same order the tree
-        shows them, not re-sorted here). `on_mark` is called with
+        shows them, not re-sorted here). `note` is the reader's own
+        personal note on that word (app.py's self.progress_notes), or
+        None/empty if they haven't written one — shown, when present,
+        below the dictionary's own example, visually distinguished from
+        it (a bold "NOTE" label instead of RUBRIC-colored italics) since
+        it's the reader's own words, not the dictionary's. `on_mark` is called with
         "known"/"learning" and takes no other arguments — the caller
         already knows which words are selected (self.selected_words),
         same division of responsibility the main window's own
@@ -101,6 +106,8 @@ class FocusViewWindow(tk.Toplevel):
         text.tag_configure("meta", font=th.FONT_SMALL_ITALIC, foreground=self.p["DIM"])
         text.tag_configure("def", font=th.FONT, foreground=self.p["FG"], spacing1=6)
         text.tag_configure("example", font=th.FONT_SMALL_ITALIC, foreground=self.p["RUBRIC"], spacing1=6)
+        text.tag_configure("note_label", font=th.FONT_SMALL_BOLD, foreground=self.p["ACCENT"], spacing1=10)
+        text.tag_configure("note", font=th.FONT, foreground=self.p["FG"])
         # Confirmed directly this matters, not just in theory: Tk's
         # built-in "sel" tag is created before any custom tag, which
         # makes it the LOWEST-priority tag by Tk's own default stacking
@@ -123,7 +130,7 @@ class FocusViewWindow(tk.Toplevel):
         # it, and reflows naturally with the rest of the text on resize.
         text.tag_configure("rule", foreground=self.p["PANEL_BORDER"], spacing1=14, spacing3=4)
 
-        for i, (word, pos, level, definition, example) in enumerate(entries):
+        for i, (word, pos, level, definition, example, note) in enumerate(entries):
             if i > 0:
                 text.insert("end", "─" * 60 + "\n", "rule")
             text.insert("end", word, "word")
@@ -150,6 +157,10 @@ class FocusViewWindow(tk.Toplevel):
             if example:
                 text.insert("end", "\n")
                 text.insert("end", f"“{example}”", "example")
+            if note:
+                text.insert("end", "\n")
+                text.insert("end", "\U0001F4DD NOTE\n", "note_label")
+                text.insert("end", note, "note")
             text.insert("end", "\n")
 
         text.config(state="disabled")

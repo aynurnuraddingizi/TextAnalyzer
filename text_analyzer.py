@@ -198,7 +198,7 @@ def empty_language_progress():
     app, when switching to a book language it's never seen progress for
     before) that need to create one on the fly, not just this module.
     """
-    return {"known": set(), "learning": set(), "schedule": {}, "learned_at": {}}
+    return {"known": set(), "learning": set(), "schedule": {}, "learned_at": {}, "notes": {}}
 
 
 def load_progress():
@@ -257,6 +257,7 @@ def load_progress():
             "learning": set(entry.get("learning", [])),
             "schedule": entry.get("schedule", {}),
             "learned_at": entry.get("learned_at", {}),
+            "notes": entry.get("notes", {}),
         }
 
     if "languages" not in data:
@@ -296,6 +297,7 @@ def save_progress(languages, reset_backups=None, grammar=None):
                     lang: {
                         "known": sorted(entry["known"]), "learning": sorted(entry["learning"]),
                         "schedule": entry.get("schedule") or {}, "learned_at": entry.get("learned_at") or {},
+                        "notes": entry.get("notes") or {},
                     }
                     for lang, entry in languages.items()
                 },
@@ -386,6 +388,29 @@ def mark_known(learned_at, word):
 
         learned_at[word] = datetime.now(timezone.utc).isoformat()
     return learned_at
+
+
+def set_note(notes, word, text):
+    """Set or clear `word`'s personal note in `notes` (the dict
+    persisted as progress["notes"]) — mutates and returns `notes`,
+    matching mark_known()/review_word()'s style. `text` is stripped;
+    empty/whitespace-only removes the entry entirely rather than
+    storing an empty string, so `word in notes` reliably means "has a
+    real note" everywhere that's checked (the vocabulary tree's 📝
+    icon, the MY NOTES view) — clearing the note box and saving is how
+    a note gets removed, no separate delete action needed.
+
+    Deliberately NOT touched by reset_progress()/restore_progress(): a
+    note is authored content the reader chose to write, not study-
+    progress state, and clearing known/learning history to restart
+    studying should never risk losing it.
+    """
+    text = (text or "").strip()
+    if text:
+        notes[word] = text
+    else:
+        notes.pop(word, None)
+    return notes
 
 
 def words_learned_since(learned_at, days):
