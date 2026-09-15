@@ -359,9 +359,24 @@ class MainWindow(tk.Tk):
         header.pack(anchor="w")
         self.themed.add(header, bg="BG", fg="FG")
 
-        self.recent_list_frame = tk.Frame(sidebar, bg=p["BG"])
-        self.recent_list_frame.pack(fill="both", expand=True, pady=(6, 10))
-        self.themed.add(self.recent_list_frame, bg="BG")
+        # A fixed-height (not expand=True) scrollable list, not a plain
+        # Frame: with up to MAX_RECENT_BOOKS (8) books, this list's own
+        # natural height can run past 400px — confirmed directly this
+        # matters, since at that size it was the list itself (not some
+        # 50/50 expand split) eating almost all of the sidebar's height,
+        # squeezing stats_container's share below what MY NOTES/UNDO
+        # LAST MARK/RESET/RESTORE PROGRESS need and clipping the bottom
+        # ones off the visible sidebar on an ordinary window size. Capping
+        # this list's own height and making IT scroll (same Canvas+
+        # Scrollbar pattern the word table already uses) keeps every book
+        # reachable while guaranteeing the stats/actions section below
+        # always gets the rest of the sidebar's height, regardless of how
+        # many recent books there are.
+        list_wrap = tk.Frame(sidebar, bg=p["BG"], height=150)
+        list_wrap.pack(fill="x", pady=(6, 10))
+        list_wrap.pack_propagate(False)
+        self.themed.add(list_wrap, bg="BG")
+        self.recent_list_frame = self._make_scrollable(list_wrap, "BG")
 
         ttk.Button(sidebar, text="+ ADD BOOK", command=self.select_pdf).pack(fill="x")
 
@@ -376,17 +391,75 @@ class MainWindow(tk.Tk):
         stats_container.pack(fill="both", expand=True, pady=(16, 0))
         self.themed.add(stats_container, bg="BG")
 
+        # Each of these two slots gets scrolling of its own (not just
+        # stats_container as a whole) — confirmed directly this is
+        # needed, not hypothetical: with MY NOTES + UNDO LAST MARK added
+        # alongside the existing two stat cards + RESET/RESTORE PROGRESS,
+        # the vocabulary slot alone needs ~560px, well past what a
+        # 1360x820 window's sidebar has left after RECENT BOOKS — RESET/
+        # RESTORE PROGRESS (and now MY NOTES/UNDO) were silently clipped
+        # off the bottom, invisible, with no error and no visual sign
+        # anything was missing.
         self.vocab_stats_frame = tk.Frame(stats_container, bg=p["BG"])
         self.vocab_stats_frame.place(relx=0, rely=0, relwidth=1, relheight=1)
         self.themed.add(self.vocab_stats_frame, bg="BG")
-        self._build_vocab_stats(self.vocab_stats_frame)
+        self._build_vocab_stats(self._make_scrollable(self.vocab_stats_frame, "BG"))
 
         self.grammar_stats_frame = tk.Frame(stats_container, bg=p["BG"])
         self.grammar_stats_frame.place(relx=0, rely=0, relwidth=1, relheight=1)
         self.themed.add(self.grammar_stats_frame, bg="BG")
-        self._build_grammar_stats(self.grammar_stats_frame)
+        self._build_grammar_stats(self._make_scrollable(self.grammar_stats_frame, "BG"))
 
         self.vocab_stats_frame.tkraise()
+
+    def _make_scrollable(self, parent, bg_key):
+        """Fill `parent` (already sized by whatever its own geometry
+        manager gave it — a fixed height, or a place()d relheight=1
+        slot) with a Canvas+Scrollbar, and return an inner Frame to pack
+        real content into. Content that outgrows `parent`'s height then
+        scrolls instead of silently being clipped past its bottom edge
+        with no visual sign anything is missing — confirmed directly
+        this actually happens (not just in theory) in three separate
+        spots in this sidebar as content grew over time: the recent
+        books list, and the vocabulary/grammar stats-plus-action-button
+        areas below it. Same Canvas+Scrollbar idiom the main word table
+        already uses elsewhere in this window, just reused here as a
+        shared helper instead of copy-pasted three times. Wheel-scrolls
+        only while the pointer is actually over this specific area
+        (bound on Enter, released on Leave), so it never steals scroll
+        input meant for the word table or any other scrollable area on
+        screen just because this one happens to exist.
+        """
+        bg = self.palette[bg_key]
+        # Scrollbar packed BEFORE the canvas, not after — confirmed
+        # directly this ordering matters, the same way it already does
+        # for the word table's own scrollbar elsewhere in this file:
+        # pack() carves out each slave's parcel in registration order,
+        # so an expand=True canvas packed first claims the ENTIRE
+        # width before a later, non-expand scrollbar gets a look in —
+        # measured directly at 1x1px when it was ordered canvas-then-
+        # scrollbar. Packed scrollbar-first, it reserves its own natural
+        # width up front and the canvas fills whatever's left.
+        scrollbar = ttk.Scrollbar(parent, orient="vertical")
+        scrollbar.pack(side="right", fill="y")
+        canvas = tk.Canvas(parent, bg=bg, highlightthickness=0, yscrollcommand=scrollbar.set)
+        canvas.pack(side="left", fill="both", expand=True)
+        self.themed.add(canvas, bg=bg_key)
+        scrollbar.config(command=canvas.yview)
+
+        inner = tk.Frame(canvas, bg=bg)
+        self.themed.add(inner, bg=bg_key)
+        window = canvas.create_window((0, 0), window=inner, anchor="nw")
+        inner.bind("<Configure>", lambda _e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.bind("<Configure>", lambda e: canvas.itemconfig(window, width=e.width))
+        canvas.bind(
+            "<Enter>",
+            lambda _e: canvas.bind_all(
+                "<MouseWheel>", lambda e: canvas.yview_scroll(int(-1 * (e.delta / 120)), "units"),
+            ),
+        )
+        canvas.bind("<Leave>", lambda _e: canvas.unbind_all("<MouseWheel>"))
+        return inner
 
     def _build_vocab_stats(self, sidebar):
         p = self.palette
