@@ -32,7 +32,6 @@ from text_analyzer import (
     define,
     due_words,
     empty_language_progress,
-    estimate_vocabulary_level,
     find_occurrences,
     language_name,
     load_book_text,
@@ -213,7 +212,7 @@ class MainWindow(tk.Tk):
         self._refresh_recent_books()
         self._refresh_vocab_stat()
         self._refresh_reading_readiness()
-        self._refresh_progress_stat()
+        self._refresh_restore_button()
         self._refresh_grammar_stat()
         self._refresh_grammar_readiness()
         self._refresh_grammar_progress_stat()
@@ -481,28 +480,11 @@ class MainWindow(tk.Tk):
         self.vocab_stat_label.pack(anchor="w", padx=10, pady=(0, 10))
         self.themed.add(self.vocab_stat_label, bg="PANEL", fg="DIM")
 
-        progress_frame = tk.Frame(
-            sidebar, bg=p["PANEL"], highlightthickness=1, highlightbackground=p["PANEL_BORDER"],
-        )
-        progress_frame.pack(fill="x", pady=(16, 0))
-        self.themed.add(progress_frame, bg="PANEL", highlightbackground="PANEL_BORDER")
-        # Text set per-language in _refresh_progress_stat() — placeholder.
-        self.progress_header_label = tk.Label(
-            progress_frame, text="PROGRESS", bg=p["PANEL"], fg=p["FG"], font=th.FONT_SMALL_BOLD,
-        )
-        self.progress_header_label.pack(anchor="w", padx=10, pady=(10, 4))
-        self.themed.add(self.progress_header_label, bg="PANEL", fg="FG")
-        self.progress_stat_label = tk.Label(
-            progress_frame, text="", bg=p["PANEL"], fg=p["DIM"], font=th.FONT, wraplength=190, justify="left",
-        )
-        self.progress_stat_label.pack(anchor="w", padx=10, pady=(0, 10))
-        self.themed.add(self.progress_stat_label, bg="PANEL", fg="DIM")
-
         # Every word with a personal note, across every book in this
         # language — see _open_notes_view(). Grouped with RESET/RESTORE
         # below rather than up near "+ ADD BOOK", since notes are a
         # vocabulary-progress concept scoped per-language, same as the
-        # two stat cards just above.
+        # stat card just above.
         self.notes_btn = ttk.Button(sidebar, text="\U0001F4DD MY NOTES", command=self._open_notes_view)
         self.notes_btn.pack(fill="x", pady=(10, 0))
 
@@ -1424,40 +1406,6 @@ class MainWindow(tk.Tk):
         self.readiness_known_label.config(text=f"✅ Known: {known_in_book:,} words")
         self.readiness_to_learn_label.config(text=f"📖 To learn: {to_learn:,} words")
 
-    def _refresh_progress_stat(self):
-        """The sidebar's PROGRESS card: how much vocabulary growth has
-        happened recently (needs learned_at — see mark_known()'s
-        docstring for why words known from before it existed don't count
-        here). Everything here is scoped to self.active_lang —
-        known_words/progress_learned_at are already that language's own
-        live bucket (see _switch_active_language()), so a German book's
-        progress can never inflate an English count or vice versa; the
-        header names the language so that scoping is visible, not just
-        true underneath.
-
-        Deliberately does NOT repeat the current book's goal/"comfortable
-        reading" percentage here — that's the dedicated READING READINESS
-        card's job (see _refresh_reading_readiness()), and duplicating it
-        in this card too was redundant, not helpful.
-        """
-        lang_name = language_name(self.active_lang)
-        self.progress_header_label.config(text=f"PROGRESS — {lang_name.upper()}")
-        this_week = words_learned_since(self.progress_learned_at, 7)
-        this_month = words_learned_since(self.progress_learned_at, 30)
-        lines = [
-            f"📅 This week: {this_week} word(s) learned",
-            f"📅 This month: {this_month} word(s) learned",
-            f"📅 All time: {len(self.known_words):,} word(s) known",
-        ]
-        # English/Spanish only (see estimate_vocabulary_level()'s
-        # docstring) — a rough proxy from known-word coverage of the
-        # bundled CEFR data, not a real placement-test result, so it's
-        # worded as an estimate rather than a bare label.
-        if self.active_lang in ("en", "es"):
-            level = estimate_vocabulary_level(self.known_words, self.active_lang)
-            lines.append(f"🎓 Estimated level: {level or 'Beginner (pre-A1)'}")
-        self.progress_stat_label.config(text="\n".join(lines))
-        self._refresh_restore_button()
 
     def _refresh_restore_button(self):
         backup = restorable_backup(self.reset_backups, self.active_lang)
@@ -1474,7 +1422,7 @@ class MainWindow(tk.Tk):
         self._save_progress()
         self._refresh_vocab_stat()
         self._refresh_reading_readiness()
-        self._refresh_progress_stat()
+        self._refresh_restore_button()
         self.render_results()
 
     def reset_progress(self):
@@ -1505,7 +1453,7 @@ class MainWindow(tk.Tk):
             self._save_progress()
             self._refresh_vocab_stat()
             self._refresh_reading_readiness()
-            self._refresh_progress_stat()
+            self._refresh_restore_button()
             self.render_results()
 
     def restore_progress(self):
@@ -1537,7 +1485,7 @@ class MainWindow(tk.Tk):
             self._save_progress()
             self._refresh_vocab_stat()
             self._refresh_reading_readiness()
-            self._refresh_progress_stat()
+            self._refresh_restore_button()
             self.render_results()
 
     def run_pipeline(self):
@@ -1695,7 +1643,7 @@ class MainWindow(tk.Tk):
             text += f"\n{due} due for review today"
         self.study_count_label.config(text=text)
         self._refresh_reading_readiness()
-        self._refresh_progress_stat()
+        self._refresh_restore_button()
 
         can_quiz = not busy and bool(self.grammar_results)
         self.grammar_quiz_btn.config(state="normal" if can_quiz else "disabled")
@@ -2774,7 +2722,7 @@ class MainWindow(tk.Tk):
         self._save_progress()
         self._refresh_vocab_stat()
         self._refresh_reading_readiness()
-        self._refresh_progress_stat()
+        self._refresh_restore_button()
         self.render_results()
 
     def _update_undo_button(self):
@@ -2812,7 +2760,7 @@ class MainWindow(tk.Tk):
         self._save_progress()
         self._refresh_vocab_stat()
         self._refresh_reading_readiness()
-        self._refresh_progress_stat()
+        self._refresh_restore_button()
         self.render_results()
         plural = "s" if len(entries) != 1 else ""
         self.status_label.config(text=f"Undid marking {len(entries)} word{plural} — back to how they were before.")
