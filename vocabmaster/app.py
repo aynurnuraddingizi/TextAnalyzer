@@ -179,6 +179,12 @@ class MainWindow(tk.Tk):
         self.progress_schedule = {}
         self.progress_learned_at = {}
         self.progress_notes = {}
+        # Snapshot of the words/state a mark-known/mark-learning action
+        # just changed, so ↩ UNDO LAST MARK (sidebar) can put them back —
+        # see _detail_mark()/_undo_last_mark(). None means "nothing to
+        # undo"; reset on language switch since it references that
+        # language's own known/learning/schedule buckets specifically.
+        self.mark_undo = None
         self._switch_active_language("en")  # default before any book's language is known
 
         # Grammar's own known/learning/schedule/learned_at — a SINGLE
@@ -426,6 +432,19 @@ class MainWindow(tk.Tk):
         # two stat cards just above.
         self.notes_btn = ttk.Button(sidebar, text="\U0001F4DD MY NOTES", command=self._open_notes_view)
         self.notes_btn.pack(fill="x", pady=(10, 0))
+
+        # Enabled only right after a mark-known/mark-learning action (see
+        # _detail_mark()) — reverts exactly that one action. Lives here,
+        # not in the Detail panel next to I KNOW IT/LEARNING, on purpose:
+        # this is what a reader reaches for AFTER realizing a mis-click,
+        # once the tree has already re-sorted/re-filtered and the word
+        # that was just marked may no longer even be visible — a
+        # selection-independent global action, same footing as RESET/
+        # RESTORE PROGRESS just below, not a per-word Detail-panel one.
+        self.undo_mark_btn = ttk.Button(
+            sidebar, text="\U000021A9 UNDO LAST MARK", command=self._undo_last_mark, state="disabled",
+        )
+        self.undo_mark_btn.pack(fill="x", pady=(10, 0))
 
         # Text set per-language in _refresh_vocab_stat() (e.g. "RESET
         # ENGLISH PROGRESS") — resets only the currently active
@@ -959,35 +978,11 @@ class MainWindow(tk.Tk):
         self.detail_text.config(state="disabled")
         self.themed.add(self.detail_text, bg="PANEL", fg="FG", insertbackground="FG")
 
-        # A personal note on the CURRENT single word — the one editable
-        # text widget in this whole panel (everything else here is
-        # deliberately read-only). Single-word only, like SPEAK/FIND ALL/
-        # WORD INFO below, not bulk like Know/Learning — see
-        # _show_selection(). Saved explicitly via SAVE NOTE, matching
-        # this app's own convention of explicit action buttons rather
-        # than silent auto-save-as-you-type anywhere else.
-        note_label = tk.Label(panel, text="NOTES", bg=p["PANEL"], fg=p["DIM"], font=th.FONT_SMALL_BOLD)
-        note_label.pack(anchor="w", padx=14, pady=(6, 0))
-        self.themed.add(note_label, bg="PANEL", fg="DIM")
-        note_row = tk.Frame(panel, bg=p["PANEL"])
-        note_row.pack(fill="x", padx=14)
-        self.themed.add(note_row, bg="PANEL")
-        self.detail_note_text = tk.Text(
-            note_row, bg=p["PANEL"], fg=p["FG"], font=th.FONT, wrap="word", relief="flat",
-            height=2, highlightthickness=1, highlightbackground=p["PANEL_BORDER"], highlightcolor=p["ACCENT"],
-            padx=6, pady=4, insertbackground=p["FG"],
-        )
-        self.detail_note_text.pack(side="left", fill="x", expand=True)
-        self.themed.add(
-            self.detail_note_text, bg="PANEL", fg="FG", insertbackground="FG", highlightbackground="PANEL_BORDER",
-            highlightcolor="ACCENT",
-        )
-        self.detail_save_note_btn = ttk.Button(
-            note_row, text="\U0001F4BE SAVE NOTE", command=self._save_note, state="disabled",
-        )
-        self.detail_save_note_btn.pack(side="left", padx=(8, 0), anchor="s")
-        self.detail_note_text.config(state="disabled")
-
+        # Kept in its original position, directly under the definition —
+        # these are the buttons used constantly, and NOTES below (added
+        # later) is deliberately placed AFTER them rather than between,
+        # so it can never push the ones actually being reached for below
+        # the visible window on a smaller/non-maximized screen.
         btn_row = tk.Frame(panel, bg=p["PANEL"])
         btn_row.pack(fill="x", padx=14, pady=10)
         self.themed.add(btn_row, bg="PANEL")
@@ -1011,6 +1006,36 @@ class MainWindow(tk.Tk):
         self.detail_know_btn.pack(side="left", padx=(8, 0))
         self.detail_learning_btn = ttk.Button(btn_row, text="\U0001F4D6 LEARNING", command=lambda: self._detail_mark("learning"), state="disabled")
         self.detail_learning_btn.pack(side="left", padx=(8, 0))
+
+        # A personal note on the CURRENT single word — the one editable
+        # text widget in this whole panel (everything else here is
+        # deliberately read-only). Single-word only, like SPEAK/FIND ALL/
+        # WORD INFO above, not bulk like Know/Learning — see
+        # _show_selection(). Saved explicitly via SAVE NOTE, matching
+        # this app's own convention of explicit action buttons rather
+        # than silent auto-save-as-you-type anywhere else. One line tall
+        # (not two) and placed below btn_row — see the comment there —
+        # so it adds the least possible height to a panel that's already
+        # tight on a smaller window.
+        note_row = tk.Frame(panel, bg=p["PANEL"])
+        note_row.pack(fill="x", padx=14, pady=(0, 10))
+        self.themed.add(note_row, bg="PANEL")
+        tk.Label(note_row, text="\U0001F4DD", bg=p["PANEL"], fg=p["DIM"], font=th.FONT_SMALL_BOLD).pack(side="left")
+        self.detail_note_text = tk.Text(
+            note_row, bg=p["PANEL"], fg=p["FG"], font=th.FONT, wrap="word", relief="flat",
+            height=1, highlightthickness=1, highlightbackground=p["PANEL_BORDER"], highlightcolor=p["ACCENT"],
+            padx=6, pady=4, insertbackground=p["FG"],
+        )
+        self.detail_note_text.pack(side="left", fill="x", expand=True, padx=(4, 0))
+        self.themed.add(
+            self.detail_note_text, bg="PANEL", fg="FG", insertbackground="FG", highlightbackground="PANEL_BORDER",
+            highlightcolor="ACCENT",
+        )
+        self.detail_save_note_btn = ttk.Button(
+            note_row, text="\U0001F4BE SAVE NOTE", command=self._save_note, state="disabled",
+        )
+        self.detail_save_note_btn.pack(side="left", padx=(8, 0))
+        self.detail_note_text.config(state="disabled")
 
     def _build_statusbar(self):
         p = self.palette
@@ -1251,6 +1276,8 @@ class MainWindow(tk.Tk):
         self.progress_schedule = bucket["schedule"]
         self.progress_learned_at = bucket["learned_at"]
         self.progress_notes = bucket["notes"]
+        self.mark_undo = None
+        self._update_undo_button()
 
     def _save_progress(self):
         # Every save writes the WHOLE progress file (every language plus
@@ -1408,6 +1435,8 @@ class MainWindow(tk.Tk):
             self.learning_words.clear()
             self.progress_schedule.clear()
             self.progress_learned_at.clear()
+            self.mark_undo = None
+            self._update_undo_button()
             self._save_progress()
             self._refresh_vocab_stat()
             self._refresh_reading_readiness()
@@ -1438,6 +1467,8 @@ class MainWindow(tk.Tk):
             # restoring it resolves that reset — a later reset makes its
             # own fresh backup rather than this one lingering ambiguously.
             del self.reset_backups[self.active_lang]
+            self.mark_undo = None
+            self._update_undo_button()
             self._save_progress()
             self._refresh_vocab_stat()
             self._refresh_reading_readiness()
@@ -2650,7 +2681,15 @@ class MainWindow(tk.Tk):
         words = words if words is not None else self.selected_words
         if not words:
             return
+        # Snapshot each word's PRE-mark state before touching anything,
+        # so _undo_last_mark() can put it back exactly — including its
+        # spaced-repetition schedule/learned-at entry, not just known/
+        # learning membership, since review_word()/mark_known() below
+        # also mutate those.
+        undo_entries = []
         for word in words:
+            prev_status = "known" if word in self.known_words else ("learning" if word in self.learning_words else "new")
+            undo_entries.append((word, prev_status, self.progress_schedule.get(word), self.progress_learned_at.get(word)))
             if status == "known":
                 self.known_words.add(word)
                 self.learning_words.discard(word)
@@ -2665,11 +2704,53 @@ class MainWindow(tk.Tk):
             review_word(self.progress_schedule, word, status == "known")
             if status == "known":
                 mark_known(self.progress_learned_at, word)
+        self.mark_undo = undo_entries
+        self._update_undo_button()
         self._save_progress()
         self._refresh_vocab_stat()
         self._refresh_reading_readiness()
         self._refresh_progress_stat()
         self.render_results()
+
+    def _update_undo_button(self):
+        if hasattr(self, "undo_mark_btn"):
+            self.undo_mark_btn.config(state="normal" if self.mark_undo else "disabled")
+
+    def _undo_last_mark(self):
+        """Revert exactly the words/state _detail_mark() last changed —
+        for the "I marked the wrong word and can't easily find it again
+        in the whole list to fix it" case. Single-level on purpose (an
+        undo of an undo isn't a meaningful action here): using any other
+        mark/reset/restore action after this clears it, same as
+        RESTORE PROGRESS's own one-shot-since-the-last-reset behavior.
+        """
+        entries = self.mark_undo
+        if not entries:
+            return
+        self.mark_undo = None
+        for word, prev_status, prev_schedule, prev_learned_at in entries:
+            self.known_words.discard(word)
+            self.learning_words.discard(word)
+            if prev_status == "known":
+                self.known_words.add(word)
+            elif prev_status == "learning":
+                self.learning_words.add(word)
+            if prev_schedule is None:
+                self.progress_schedule.pop(word, None)
+            else:
+                self.progress_schedule[word] = prev_schedule
+            if prev_learned_at is None:
+                self.progress_learned_at.pop(word, None)
+            else:
+                self.progress_learned_at[word] = prev_learned_at
+        self._update_undo_button()
+        self._save_progress()
+        self._refresh_vocab_stat()
+        self._refresh_reading_readiness()
+        self._refresh_progress_stat()
+        self.render_results()
+        plural = "s" if len(entries) != 1 else ""
+        self.status_label.config(text=f"Undid marking {len(entries)} word{plural} — back to how they were before.")
 
     def _copy_selection(self, _event=None):
         words = [w for w in self.tree.selection() if w in self.word_lookup]
