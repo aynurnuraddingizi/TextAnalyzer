@@ -1428,14 +1428,17 @@ class MainWindow(tk.Tk):
         """The sidebar's PROGRESS card: how much vocabulary growth has
         happened recently (needs learned_at — see mark_known()'s
         docstring for why words known from before it existed don't count
-        here), plus the current book's goal and how close "comfortable
-        reading" (a common 95%-of-vocabulary benchmark in reading
-        research) is. Everything here is scoped to self.active_lang —
+        here). Everything here is scoped to self.active_lang —
         known_words/progress_learned_at are already that language's own
         live bucket (see _switch_active_language()), so a German book's
         progress can never inflate an English count or vice versa; the
         header names the language so that scoping is visible, not just
         true underneath.
+
+        Deliberately does NOT repeat the current book's goal/"comfortable
+        reading" percentage here — that's the dedicated READING READINESS
+        card's job (see _refresh_reading_readiness()), and duplicating it
+        in this card too was redundant, not helpful.
         """
         lang_name = language_name(self.active_lang)
         self.progress_header_label.config(text=f"PROGRESS — {lang_name.upper()}")
@@ -1453,17 +1456,6 @@ class MainWindow(tk.Tk):
         if self.active_lang in ("en", "es"):
             level = estimate_vocabulary_level(self.known_words, self.active_lang)
             lines.append(f"🎓 Estimated level: {level or 'Beginner (pre-A1)'}")
-        if self.glossary_entries:
-            defined_total = len(self.glossary_entries)
-            known_in_book = sum(1 for w, _ in self.glossary_entries if w in self.known_words)
-            pct = round(known_in_book / defined_total * 100) if defined_total else 0
-            target = 95
-            lines.append("")
-            lines.append(f"🎯 Goal: {defined_total:,} word(s) in this book ({pct}% there)")
-            if pct >= target:
-                lines.append(f"📖 Reading readiness: {pct}% — comfortable reading level reached!")
-            else:
-                lines.append(f"📖 Reading readiness: {pct}% ({target - pct}% to a comfortable {target}%)")
         self.progress_stat_label.config(text="\n".join(lines))
         self._refresh_restore_button()
 
