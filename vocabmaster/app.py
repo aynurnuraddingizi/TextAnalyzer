@@ -47,7 +47,6 @@ from text_analyzer import (
     speak_word,
     word_family_root,
     word_pos,
-    words_learned_since,
 )
 
 import theme as th
@@ -215,7 +214,7 @@ class MainWindow(tk.Tk):
         self._refresh_restore_button()
         self._refresh_grammar_stat()
         self._refresh_grammar_readiness()
-        self._refresh_grammar_progress_stat()
+        self._refresh_grammar_restore_button()
         th.apply_dark_titlebar(self, self.settings.get("theme") == "dark")
         self.after(100, self.poll_queue)
         self.after(500, self._tick_elapsed)
@@ -530,22 +529,6 @@ class MainWindow(tk.Tk):
         )
         self.grammar_stat_label.pack(anchor="w", padx=10, pady=(0, 10))
         self.themed.add(self.grammar_stat_label, bg="PANEL", fg="DIM")
-
-        grammar_progress_frame = tk.Frame(
-            sidebar, bg=p["PANEL"], highlightthickness=1, highlightbackground=p["PANEL_BORDER"],
-        )
-        grammar_progress_frame.pack(fill="x", pady=(16, 0))
-        self.themed.add(grammar_progress_frame, bg="PANEL", highlightbackground="PANEL_BORDER")
-        self.grammar_progress_header_label = tk.Label(
-            grammar_progress_frame, text="GRAMMAR PROGRESS", bg=p["PANEL"], fg=p["FG"], font=th.FONT_SMALL_BOLD,
-        )
-        self.grammar_progress_header_label.pack(anchor="w", padx=10, pady=(10, 4))
-        self.themed.add(self.grammar_progress_header_label, bg="PANEL", fg="FG")
-        self.grammar_progress_stat_label = tk.Label(
-            grammar_progress_frame, text="", bg=p["PANEL"], fg=p["DIM"], font=th.FONT, wraplength=190, justify="left",
-        )
-        self.grammar_progress_stat_label.pack(anchor="w", padx=10, pady=(0, 10))
-        self.themed.add(self.grammar_progress_stat_label, bg="PANEL", fg="DIM")
 
         # "RESET GRAMMAR"/"RESTORE GRAMMAR", not the longer "...
         # PROGRESS" — same precedent _refresh_vocab_stat() already
@@ -1548,7 +1531,7 @@ class MainWindow(tk.Tk):
                     self._draw_grammar_chart()
                     self._refresh_grammar_stat()
                     self._refresh_grammar_readiness()
-                    self._refresh_grammar_progress_stat()
+                    self._refresh_grammar_restore_button()
                     stopped = self.cancel_event.is_set()
                     prefix = "Stopped — " if stopped else "Done — "
                     text = f"{prefix}{len(defined)} defined, {len(undefined)} without a dictionary match."
@@ -1611,7 +1594,7 @@ class MainWindow(tk.Tk):
         self.grammar_identify_btn.config(state="normal" if can_quiz else "disabled")
         self.grammar_anki_btn.config(state="normal" if can_quiz else "disabled")
         self._refresh_grammar_readiness()
-        self._refresh_grammar_progress_stat()
+        self._refresh_grammar_restore_button()
 
         self.stop_btn.config(state="normal" if busy else "disabled")
         if busy:
@@ -2106,7 +2089,7 @@ class MainWindow(tk.Tk):
         self._save_progress()
         self._refresh_grammar_stat()
         self._refresh_grammar_readiness()
-        self._refresh_grammar_progress_stat()
+        self._refresh_grammar_restore_button()
         self._render_grammar_results()
         # _render_grammar_results() rebuilds the tree from scratch and
         # clears the detail panel — re-select and re-show explicitly
@@ -2354,17 +2337,6 @@ class MainWindow(tk.Tk):
             text += f"\n{due} due for review today"
         self.grammar_quiz_count_label.config(text=text)
 
-    def _refresh_grammar_progress_stat(self):
-        this_week = words_learned_since(self.grammar_learned_at, 7)
-        this_month = words_learned_since(self.grammar_learned_at, 30)
-        lines = [
-            f"📅 This week: {this_week} structure(s) learned",
-            f"📅 This month: {this_month} structure(s) learned",
-            f"📅 All time: {len(self.grammar_known):,} structure(s) known",
-        ]
-        self.grammar_progress_stat_label.config(text="\n".join(lines))
-        self._refresh_grammar_restore_button()
-
     def _refresh_grammar_restore_button(self):
         # "grammar" is a fixed sentinel key into the SAME self.reset_backups
         # dict the per-language vocab backups use — never a real ISO
@@ -2452,7 +2424,7 @@ class MainWindow(tk.Tk):
         self._save_progress()
         self._refresh_grammar_stat()
         self._refresh_grammar_readiness()
-        self._refresh_grammar_progress_stat()
+        self._refresh_grammar_restore_button()
         self._render_grammar_results()
 
     def reset_grammar_progress(self):
@@ -2474,7 +2446,7 @@ class MainWindow(tk.Tk):
             self._save_progress()
             self._refresh_grammar_stat()
             self._refresh_grammar_readiness()
-            self._refresh_grammar_progress_stat()
+            self._refresh_grammar_restore_button()
             self._render_grammar_results()
 
     def restore_grammar_progress(self):
@@ -2498,7 +2470,7 @@ class MainWindow(tk.Tk):
             self._save_progress()
             self._refresh_grammar_stat()
             self._refresh_grammar_readiness()
-            self._refresh_grammar_progress_stat()
+            self._refresh_grammar_restore_button()
             self._render_grammar_results()
 
     # --------------------------------------------------- grammar exporting
