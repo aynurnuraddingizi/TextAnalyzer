@@ -666,32 +666,6 @@ class MainWindow(tk.Tk):
         self.study_writing_btn.config(state="disabled")
         self.study_anki_btn.config(state="disabled")
 
-        stats_frame = tk.Frame(
-            col, bg=p["PANEL"], highlightthickness=1, highlightbackground=p["PANEL_BORDER"],
-        )
-        stats_frame.pack(fill="both", expand=True, pady=(16, 0))
-        self.themed.add(stats_frame, bg="PANEL", highlightbackground="PANEL_BORDER")
-        tk.Label(stats_frame, text="WORD FREQUENCY", bg=p["PANEL"], fg=p["FG"], font=th.FONT_SMALL_BOLD).pack(
-            anchor="w", padx=10, pady=(10, 4)
-        )
-        self.chart_canvas = tk.Canvas(stats_frame, bg=p["PANEL"], highlightthickness=0, height=160)
-        self.chart_canvas.pack(fill="x", padx=10)
-        self.coverage_label = tk.Label(
-            stats_frame, text="", bg=p["PANEL"], fg=p["DIM"], font=th.FONT_SMALL_ITALIC,
-            wraplength=230, justify="left",
-        )
-        self.coverage_label.pack(anchor="w", padx=10, pady=(10, 0))
-        self.themed.add(self.coverage_label, bg="PANEL", fg="DIM")
-        # English/Spanish only (see readability_stats()'s docstring —
-        # Flesch/Fernández Huerta's coefficients are each calibrated for
-        # one specific language).
-        self.readability_label = tk.Label(
-            stats_frame, text="", bg=p["PANEL"], fg=p["DIM"], font=th.FONT_SMALL_ITALIC,
-            wraplength=230, justify="left",
-        )
-        self.readability_label.pack(anchor="w", padx=10, pady=(0, 10))
-        self.themed.add(self.readability_label, bg="PANEL", fg="DIM")
-
     def _build_grammar_right_column(self, col):
         p = self.palette
         readiness_frame, readiness_widgets = build_grammar_readiness_card(
@@ -1196,8 +1170,6 @@ class MainWindow(tk.Tk):
         self.phrase_detail_text.tag_configure("num", foreground=p["DIM"])
         self.phrase_detail_text.tag_configure("example", foreground=p["FG"])
         self.phrase_detail_text.tag_configure("hint", foreground=p["DIM"])
-        self.chart_canvas.config(bg=p["PANEL"])
-        self._draw_chart()
         self.grammar_chart_canvas.config(bg=p["PANEL"])
         self._draw_grammar_chart()
         th.apply_dark_titlebar(self, self.settings["theme"] == "dark")
@@ -1573,7 +1545,6 @@ class MainWindow(tk.Tk):
                     self.render_results()
                     self._render_grammar_results()
                     self._render_phrases()
-                    self._draw_chart()
                     self._draw_grammar_chart()
                     self._refresh_grammar_stat()
                     self._refresh_grammar_readiness()
@@ -1587,16 +1558,6 @@ class MainWindow(tk.Tk):
                     if not stopped and cov:
                         text += f" {cov}"
                     self.status_label.config(text=text)
-                    self.coverage_label.config(text=cov or "")
-                    if readability:
-                        formula_name = "Fernández Huerta" if lang == "es" else "Flesch"
-                        self.readability_label.config(text=(
-                            f"Avg. sentence length: {readability['avg_sentence_length']} words   ·   "
-                            f"Lexical density: {readability['lexical_density']}%\n"
-                            f"Readability ({formula_name}): {readability['flesch_score']} — {readability['flesch_level']}"
-                        ))
-                    else:
-                        self.readability_label.config(text="")
                     self._set_busy(False)
                 elif kind == "error":
                     self.status_label.config(text=f"Error: {item[1]}")
@@ -2800,36 +2761,6 @@ class MainWindow(tk.Tk):
         self.clipboard_append("\n".join(definitions))
         plural = "s" if len(words) != 1 else ""
         self.status_label.config(text=f"Copied {len(words)} definition{plural} to the clipboard.")
-
-    # -------------------------------------------------------------- chart
-
-    def _draw_chart(self):
-        c = self.chart_canvas
-        c.delete("all")
-        if not self.word_freqs:
-            return
-        buckets = [("1-10", 0), ("11-50", 0), ("51-100", 0), ("100+", 0)]
-        for count in self.word_freqs.values():
-            if count <= 10:
-                buckets[0] = (buckets[0][0], buckets[0][1] + 1)
-            elif count <= 50:
-                buckets[1] = (buckets[1][0], buckets[1][1] + 1)
-            elif count <= 100:
-                buckets[2] = (buckets[2][0], buckets[2][1] + 1)
-            else:
-                buckets[3] = (buckets[3][0], buckets[3][1] + 1)
-        max_val = max(v for _, v in buckets) or 1
-        p = self.palette
-        width = max(int(c.winfo_width()) or 220, 220)
-        row_h = 34
-        for i, (label, value) in enumerate(buckets):
-            y = i * row_h + 8
-            c.create_text(4, y + 10, anchor="w", text=label, fill=p["FG"], font=th.FONT_SMALL_BOLD)
-            bar_max = width - 90
-            bar_w = int(bar_max * value / max_val)
-            c.create_rectangle(60, y, 60 + bar_w, y + 18, fill=p["ACCENT"], width=0)
-            c.create_text(66 + bar_w, y + 9, anchor="w", text=str(value), fill=p["DIM"], font=th.FONT_SMALL_BOLD)
-        c.config(height=len(buckets) * row_h + 12)
 
     # ----------------------------------------------------------- study mode
 
